@@ -1,0 +1,61 @@
+name: Install and Run Guacamole with Ngrok
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Kiểm tra mã nguồn
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Bước 1: Cài đặt Docker
+    - name: Install Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker.io
+        sudo systemctl enable --now docker
+
+    # Bước 2: Tải và chạy Guacamole
+    - name: Run Guacamole container
+      run: |
+        docker run -d --name guacdb \
+          -e MYSQL_ROOT_PASSWORD=root_password \
+          -e MYSQL_DATABASE=guacamole_db \
+          -e MYSQL_USER=guacamole_user \
+          -e MYSQL_PASSWORD=guac_pass \
+          mysql:8
+
+        docker run -d --name guacd \
+          guacamole/guacd:1.5.3
+
+        docker run -d --name guacamole \
+          --link guacd \
+          --link guacdb \
+          -e MYSQL_HOST=guacdb \
+          -e MYSQL_DATABASE=guacamole_db \
+          -e MYSQL_USER=guacamole_user \
+          -e MYSQL_PASSWORD=guac_pass \
+          -p 8080:8080 guacamole/guacamole:1.5.3
+
+    # Bước 3: Tải và khởi động Ngrok
+    - name: Download and run Ngrok
+      run: |
+        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok-stable-linux-amd64.zip -o ngrok.zip
+        unzip ngrok.zip
+        ./ngrok authtoken 2nyiyWrhpT6OwyUoaoZ2zdE9nNo_7KtHBQxaox3Wx2t9qBHTT
+        nohup ./ngrok http 8080 &
+
+    # Bước 4: Lấy Ngrok URL và hiển thị
+    - name: Get Ngrok URL
+      run: |
+        sleep 10 # Đợi Ngrok khởi động
+        curl --silent --show-error --max-time 10 localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url'
